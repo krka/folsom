@@ -67,7 +67,8 @@ public final class Utils {
   }
 
   static <T> CompletionStage<T> onExecutor(CompletionStage<T> future, Executor executor) {
-    if (executor == null) {
+    // It's pointless to try to move a completed future to a different executor
+    if (executor == null || future.toCompletableFuture().isDone()) {
       return future;
     }
     return future.whenCompleteAsync((t, throwable) -> {}, executor);

@@ -1,11 +1,13 @@
 package com.spotify.folsom.client;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
 import org.junit.Test;
 import org.testcontainers.shaded.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -32,7 +34,7 @@ public class UtilsTest {
   }
 
   @Test
-  public void testOnExecutorOk() throws ExecutionException, InterruptedException {
+  public void testOnExecutorNotCompletedYetAsync() throws ExecutionException, InterruptedException {
     ExecutorService executorA =
         Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setNameFormat("thread-A-%d").setDaemon(true).build());
@@ -52,10 +54,42 @@ public class UtilsTest {
   }
 
   @Test
-  public void testOnExecutorException() throws ExecutionException, InterruptedException {
-    ExecutorService executorA =
+  public void testOnExecutorNotCompletedYetMain() throws ExecutionException, InterruptedException {
+    ExecutorService executorB =
         Executors.newSingleThreadExecutor(
-            new ThreadFactoryBuilder().setNameFormat("thread-A-%d").setDaemon(true).build());
+            new ThreadFactoryBuilder().setNameFormat("thread-B-%d").setDaemon(true).build());
+    CompletableFuture<String> future = new CompletableFuture<>();
+    CompletableFuture<String> future2 =
+        Utils.onExecutor(future, executorB)
+            .toCompletableFuture()
+            .thenApply(s -> Thread.currentThread().getName());
+    future.complete(Thread.currentThread().getName());
+    assertEquals("thread-B-0", future2.get());
+  }
+
+  @Test
+  public void testOnExecutorAlreadyCompleted() throws ExecutionException, InterruptedException {
+    ExecutorService executorB =
+        Executors.newSingleThreadExecutor(
+            new ThreadFactoryBuilder().setNameFormat("thread-B-%d").setDaemon(true).build());
+
+    CompletableFuture<String> future = new CompletableFuture<>();
+    future.complete(Thread.currentThread().getName());
+
+    CompletableFuture<String> future2 =
+        Utils.onExecutor(future, executorB)
+            .toCompletableFuture()
+            .thenApply(s -> Thread.currentThread().getName());
+    String actual = future2.get();
+
+    // It doesn't matter that we try to use an executor, since the future is already completed.
+    // Even if we could run complete the resulting future on the executor, we will still run on
+    // the current thread if thenApply() is called after the future has finished.
+    assertEquals(Thread.currentThread().getName(), actual);
+  }
+
+  @Test
+  public void testOnExecutorException() throws ExecutionException, InterruptedException {
     ExecutorService executorB =
         Executors.newSingleThreadExecutor(
             new ThreadFactoryBuilder().setNameFormat("thread-B-%d").setDaemon(true).build());
@@ -64,10 +98,7 @@ public class UtilsTest {
         Utils.onExecutor(future, executorB)
             .toCompletableFuture()
             .exceptionally(s -> Thread.currentThread().getName());
-    executorA.submit(
-        () -> {
-          future.completeExceptionally(new RuntimeException());
-        });
+    future.completeExceptionally(new RuntimeException());
     assertEquals("thread-B-0", future2.get());
   }
 }

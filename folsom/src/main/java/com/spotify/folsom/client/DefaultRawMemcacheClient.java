@@ -222,8 +222,7 @@ public class DefaultRawMemcacheClient extends AbstractRawMemcacheClient {
       SetRequest setRequest = (SetRequest) request;
       byte[] value = setRequest.getValue();
       if (value.length > maxSetLength) {
-        return (CompletionStage<T>)
-            onExecutor(CompletableFuture.completedFuture(MemcacheStatus.VALUE_TOO_LARGE));
+        return (CompletionStage<T>) CompletableFuture.completedFuture(MemcacheStatus.VALUE_TOO_LARGE);
       }
     }
 
@@ -234,20 +233,15 @@ public class DefaultRawMemcacheClient extends AbstractRawMemcacheClient {
       String disconnectReason = this.disconnectReason.get();
       if (disconnectReason != null) {
         MemcacheClosedException exception = new MemcacheClosedException(disconnectReason);
-        return onExecutor(CompletableFutures.exceptionallyCompletedFuture(exception));
+        return CompletableFutures.exceptionallyCompletedFuture(exception);
       }
 
-      return onExecutor(
-          CompletableFutures.exceptionallyCompletedFuture(
-              new MemcacheOverloadedException("too many outstanding requests")));
+      return CompletableFutures.exceptionallyCompletedFuture(
+              new MemcacheOverloadedException("too many outstanding requests"));
     }
     channel.write(request, new RequestWritePromise(channel, request));
     flusher.flush();
-    return onExecutor(request.asFuture());
-  }
-
-  private <T> CompletionStage<T> onExecutor(CompletionStage<T> future) {
-    return Utils.onExecutor(future, executor);
+    return Utils.onExecutor(request.asFuture(), executor);
   }
 
   /**
